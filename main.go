@@ -3,8 +3,7 @@ package main
 func main() {
 	// Initialize the server
 	server := NewServer()
-	defer server.NATSConn.Close()
-	defer server.NATSServer.Shutdown()
+	defer server.Shutdown()
 
 	// Create FetchCDCWorker
 	fetchCDCWorker := NewFetchCDCWorker("FetchCDCWorker", server.NATSConn)

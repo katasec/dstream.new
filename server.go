@@ -30,3 +30,8 @@ func NewServer() *Server {
 		NATSConn:   nc,
 	}
 }
+
+func (s *Server) Shutdown() {
+	s.NATSConn.Close()
+	s.NATSServer.Shutdown()
+}
