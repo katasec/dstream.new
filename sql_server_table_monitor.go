@@ -43,8 +43,8 @@ func NewSQLServerMonitor(dbConn *sql.DB, tableName string, pollInterval, maxPoll
 	}
 }
 
-// MonitorTable continuously monitors the specified table
-func (m *SQLServerTableMonitor) MonitorTable() error {
+// StartMonitor continuously monitors the specified table
+func (m *SQLServerTableMonitor) StartMonitor() error {
 	err := m.checkpointMgr.InitializeCheckpointTable()
 	if err != nil {
 		return fmt.Errorf("error initializing checkpoint table: %w", err)

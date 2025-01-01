@@ -20,8 +20,8 @@ func NewPublisherWorker(name string, conn *nats.Conn) *PublisherWorker {
 	}
 }
 
-// SubscribeAndPrint subscribes to a topic and prints received messages
-func (w *PublisherWorker) SubscribeAndPrint(topic string) {
+// Subscribe subscribes to a topic and prints received messages
+func (w *PublisherWorker) Subscribe(topic string) {
 	_, err := w.NATSConn.Subscribe(topic, func(msg *nats.Msg) {
 		log.Printf("[%s] Received message on topic '%s': %s", w.Name, topic, msg.Data)
 	})
