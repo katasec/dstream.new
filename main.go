@@ -13,9 +13,28 @@ import (
 )
 
 func main() {
-	fetchLastLSNs()
+	//fetchLastLSNs()
+	//select {}
+	doServerStuff()
+
 }
 
+func doServerStuff() {
+	// Initialize the server
+	server := NewServer()
+	server.Start()
+
+	// Demonstrate CDC Fetcher querying LastLSN from CheckpointWorker
+	tableName := "Cars"
+	log.Printf("[Main] Demonstrating CDC Fetcher querying LastLSN for table '%s'...", tableName)
+	lastLSN := server.cdcFetcher.FetchLastLSN(tableName)
+
+	// Format the LSN for proper display
+	formattedLSN := hex.EncodeToString(lastLSN)
+	log.Printf("[Main] Fetched LastLSN for table '%s': %s", tableName, formattedLSN)
+
+	select {}
+}
 func monitorTable() {
 	dbConn, _ := sql.Open("sqlserver", os.Getenv("DSTREAM_DB_CONNECTION_STRING"))
 	tableName := "Cars"
@@ -32,8 +51,8 @@ func doStuff() {
 	defer server.Shutdown()
 
 	// Create a Fetcher and a Publisher with the same nats connection
-	cdcFetcher := NewCDCFetcher("CDCFetcher", server.NATSConn)
-	publisher := NewPublisherWorker("Publisher", server.NATSConn)
+	cdcFetcher := NewCDCFetcher("CDCFetcher", server.natsConn)
+	publisher := NewPublisherWorker("Publisher", server.natsConn)
 
 	// PublisherWorker subscribes to the topic
 	topic := "cdc.events"
@@ -41,8 +60,6 @@ func doStuff() {
 
 	// FetchCDCWorker publishes data to the topic
 	cdcFetcher.Publish(topic)
-
-	select {}
 }
 
 func fetchLastLSNs() {
@@ -58,7 +75,7 @@ func fetchLastLSNs() {
 	defer dbConn.Close()
 
 	// Create and start the CheckpointWorker
-	cw := NewCheckpointWorker(dbConn, server.NATSConn)
+	cw := NewCheckpointWorker(dbConn, server.natsConn)
 	cw.Start()
 
 	// Give the worker some time to start up (optional in case of race conditions)
@@ -73,7 +90,7 @@ func fetchLastLSNs() {
 		reqData, _ := json.Marshal(req)
 
 		// Publish the request and wait for a response
-		msg, err := server.NATSConn.Request("checkpoint.load", reqData, 2*time.Second)
+		msg, err := server.natsConn.Request("checkpoint.load", reqData, 2*time.Second)
 		if err != nil {
 			log.Printf("Failed to fetch last LSN for table %s: %v", tableName, err)
 			continue
