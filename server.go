@@ -4,8 +4,10 @@ import (
 	"database/sql"
 	"log"
 	"os"
+	"sync"
 
 	"github.com/katasec/dstream/config"
+	"github.com/katasec/dstream/topics"
 	"github.com/nats-io/nats-server/v2/server"
 	"github.com/nats-io/nats-server/v2/test"
 	"github.com/nats-io/nats.go"
@@ -48,7 +50,7 @@ func NewServer() *Server {
 		dbConn:     dbConn,
 
 		checkpointWorker: NewCheckpointWorker(dbConn, natsConn),
-		cdcFetcher:       NewCDCFetcher("CDCFetcher", natsConn),
+		cdcFetcher:       NewChangeDataFetcher("CDCFetcher", natsConn, dbConn),
 		publisher:        NewPublisherWorker("Publisher", natsConn),
 	}
 
@@ -64,13 +66,36 @@ func (s *Server) Start() {
 
 	// Subscribe Publisher to CDC Events
 	log.Println("Starting Publisher Worker...")
-	s.publisher.Subscribe("cdc.events")
+	s.publisher.Subscribe(topics.CDC.Event)
 
-	// Start CDC Fetcher to process CDC changes
-	log.Println("Starting CDC Fetcher...")
-	//s.cdcFetcher.ProcessCDCChanges("users")
+	// WaitGroup to manage goroutines
+	var wg sync.WaitGroup
 
-	log.Println("Server started successfully.")
+	// Loop through tables in the config
+	for _, table := range s.config.Tables {
+		tableName := table.Name
+		log.Printf("[Server] Preparing to process CDC changes for table '%s'...", tableName)
+
+		// Fetch the last LSN for the table
+		lastLSN := s.cdcFetcher.FetchLastLSN(tableName)
+
+		// Increment the WaitGroup counter
+		wg.Add(1)
+
+		// Launch a goroutine per table to process CDC changes
+		go s.launchProcessCDCChange(tableName, lastLSN, &wg)
+	}
+
+	// Wait for all goroutines to finish
+	wg.Wait()
+
+	log.Println("All CDC changes processed. Server started successfully.")
+}
+
+func (s *Server) launchProcessCDCChange(tableName string, lastLSN []byte, wg *sync.WaitGroup) {
+	defer wg.Done() // Decrement the counter when the goroutine completes
+	log.Printf("[Server] Processing CDC changes for table '%s'...", tableName)
+	s.cdcFetcher.ProcessCDCChanges(tableName, lastLSN)
 }
 
 // Shutdown gracefully shuts down all server components

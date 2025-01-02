@@ -192,22 +192,22 @@ func (monitor *SQLServerTableMonitor) fetchCDCChanges(lastLSN []byte) ([]map[str
 	return changes, latestLSN, nil
 }
 
-// fetchColumnNames fetches column names for a specified table
-func fetchColumnNames(db *sql.DB, tableName string) ([]string, error) {
-	query := `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = @tableName`
-	rows, err := db.Query(query, sql.Named("tableName", tableName))
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
+// // fetchColumnNames fetches column names for a specified table
+// func fetchColumnNames(db *sql.DB, tableName string) ([]string, error) {
+// 	query := `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = @tableName`
+// 	rows, err := db.Query(query, sql.Named("tableName", tableName))
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	defer rows.Close()
 
-	var columns []string
-	for rows.Next() {
-		var columnName string
-		if err := rows.Scan(&columnName); err != nil {
-			return nil, err
-		}
-		columns = append(columns, columnName)
-	}
-	return columns, rows.Err()
-}
+// 	var columns []string
+// 	for rows.Next() {
+// 		var columnName string
+// 		if err := rows.Scan(&columnName); err != nil {
+// 			return nil, err
+// 		}
+// 		columns = append(columns, columnName)
+// 	}
+// 	return columns, rows.Err()
+// }

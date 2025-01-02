@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"log"
@@ -13,13 +14,15 @@ import (
 type ChangeDataFetcher struct {
 	name string
 	conn *nats.Conn
+	db   *sql.DB
 }
 
-// NewCDCFetcher creates a new worker that fetches CDC data
-func NewCDCFetcher(name string, conn *nats.Conn) *ChangeDataFetcher {
+// NewChangeDataFetcher creates a new worker that fetches CDC data
+func NewChangeDataFetcher(name string, conn *nats.Conn, db *sql.DB) *ChangeDataFetcher {
 	return &ChangeDataFetcher{
 		name: name,
 		conn: conn,
+		db:   db,
 	}
 }
 
@@ -49,30 +52,16 @@ func (w *ChangeDataFetcher) FetchLastLSN(tableName string) []byte {
 }
 
 // ProcessCDCChanges processes CDC changes for a given table and publishes them
-func (w *ChangeDataFetcher) ProcessCDCChanges(tableName string) {
+func (w *ChangeDataFetcher) ProcessCDCChanges(tableName string, lastLSN []byte) {
+
 	// Fetch the last LSN
-	lastLSN := w.FetchLastLSN(tableName)
+	lastLSN = w.FetchLastLSN(tableName)
 
-	// Simulate fetching CDC changes using the last LSN
-	log.Printf("[%s] Processing CDC changes for table '%s' starting from LSN: %s", w.name, tableName, lastLSN)
-
-	// Hardcoded new LSN and data (simulate processing changes)
-	newLSN := []byte("0x00000000000000000001")
-	cdcData := `{
-		"operation": "INSERT",
-		"table": "users",
-		"data": { "id": 1, "name": "Alice" }
-	}`
-
-	// Publish the CDC data to a topic
-	topic := "cdc.events"
-	if err := w.conn.Publish(topic, []byte(cdcData)); err != nil {
-		log.Fatalf("[%s] Failed to publish CDC data: %v", w.name, err)
+	monitor := NewSQLServerTableMonitor2(w.db, tableName, w.conn, 5*time.Second, 30*time.Second)
+	err := monitor.StartMonitor(lastLSN)
+	if err != nil {
+		log.Fatalf("[%s] Error monitoring table '%s': %v", w.name, tableName, err)
 	}
-	log.Printf("[%s] Published CDC data to topic '%s': %s", w.name, topic, cdcData)
-
-	// Save the new LSN
-	w.SaveLastLSN(tableName, newLSN)
 }
 
 // SaveLastLSN saves the last LSN for a given table via the checkpoint worker
