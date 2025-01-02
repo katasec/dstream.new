@@ -10,10 +10,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/katasec/dstream/topics"
 	"github.com/nats-io/nats.go"
 )
 
-type SQLServerTableMonitor2 struct {
+type SQLServerTableMonitor struct {
 	dbConn          *sql.DB
 	tableName       string
 	pollInterval    time.Duration
@@ -25,14 +26,14 @@ type SQLServerTableMonitor2 struct {
 }
 
 // NewSQLServerTableMonitor2 creates a new SQLServerTableMonitor2
-func NewSQLServerTableMonitor2(dbConn *sql.DB, tableName string, natsConn *nats.Conn, pollInterval, maxPollInterval time.Duration) *SQLServerTableMonitor2 {
+func NewSQLServerTableMonitor2(dbConn *sql.DB, tableName string, natsConn *nats.Conn, pollInterval, maxPollInterval time.Duration) *SQLServerTableMonitor {
 	// Fetch column names once and store them in the struct
 	columns, err := fetchColumnNames(dbConn, tableName)
 	if err != nil {
 		log.Fatalf("Failed to fetch column names for table %s: %v", tableName, err)
 	}
 
-	return &SQLServerTableMonitor2{
+	return &SQLServerTableMonitor{
 		dbConn:          dbConn,
 		tableName:       tableName,
 		natsConn:        natsConn,
@@ -44,12 +45,12 @@ func NewSQLServerTableMonitor2(dbConn *sql.DB, tableName string, natsConn *nats.
 }
 
 // StartMonitor begins monitoring changes for the table and publishes them to NATS
-func (m *SQLServerTableMonitor2) StartMonitor(lastLSN []byte) error {
+func (m *SQLServerTableMonitor) StartMonitor(lastLSN []byte) error {
 	backoff := NewBackoffManager(m.pollInterval, m.maxPollInterval)
 	m.lastLSNs[m.tableName] = lastLSN
 
 	for {
-		log.Printf("Polling changes for table: %s", m.tableName)
+		log.Printf("Polling changes for table %s, since LSN: %s", m.tableName, hex.EncodeToString(lastLSN))
 		changes, newLSN, err := m.fetchCDCChanges(m.lastLSNs[m.tableName])
 		if err != nil {
 			log.Printf("Error fetching changes for %s: %v", m.tableName, err)
@@ -64,7 +65,9 @@ func (m *SQLServerTableMonitor2) StartMonitor(lastLSN []byte) error {
 					log.Printf("Failed to publish change for table %s: %v", m.tableName, err)
 				}
 			}
+			m.lsnMutex.Lock()
 			m.lastLSNs[m.tableName] = newLSN
+			m.lsnMutex.Unlock()
 			backoff.ResetInterval()
 		} else {
 			backoff.IncreaseInterval()
@@ -76,7 +79,7 @@ func (m *SQLServerTableMonitor2) StartMonitor(lastLSN []byte) error {
 }
 
 // fetchCDCChanges queries CDC changes and returns relevant events
-func (m *SQLServerTableMonitor2) fetchCDCChanges(lastLSN []byte) ([]map[string]interface{}, []byte, error) {
+func (m *SQLServerTableMonitor) fetchCDCChanges(lastLSN []byte) ([]map[string]interface{}, []byte, error) {
 	columnList := "ct.__$start_lsn, ct.__$operation, " + strings.Join(m.columns, ", ")
 	query := fmt.Sprintf(`
         SELECT %s
@@ -117,12 +120,12 @@ func (m *SQLServerTableMonitor2) fetchCDCChanges(lastLSN []byte) ([]map[string]i
 }
 
 // publishChangeToNATS publishes a CDC change to a NATS topic
-func (m *SQLServerTableMonitor2) publishChangeToNATS(change map[string]interface{}) error {
+func (m *SQLServerTableMonitor) publishChangeToNATS(change map[string]interface{}) error {
 	data, err := json.Marshal(change)
 	if err != nil {
 		return fmt.Errorf("failed to marshal change: %w", err)
 	}
-	return m.natsConn.Publish("cdc.events", data)
+	return m.natsConn.Publish(topics.CDC.Event, data)
 }
 
 // parseChange processes a row into a structured change

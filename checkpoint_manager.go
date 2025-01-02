@@ -20,6 +20,7 @@ type CheckpointManager struct {
 
 // NewCheckpointManager initializes a new CheckpointManager
 func NewCheckpointManager(dbConn *sql.DB, tableName string, checkpointTableName ...string) *CheckpointManager {
+
 	// Use provided checkpoint table name if supplied; otherwise, use default
 	cpTable := defaultCheckpointTableName
 	if len(checkpointTableName) > 0 && checkpointTableName[0] != "" {
@@ -57,8 +58,12 @@ func (c *CheckpointManager) InitializeCheckpointTable() error {
 // LoadLastLSN retrieves the last known LSN for the specified table
 func (c *CheckpointManager) LoadLastLSN(defaultStartLSN string) ([]byte, error) {
 	var lastLSN []byte
+
+	// Query checkpoint table for LSN
 	query := fmt.Sprintf("SELECT last_lsn FROM %s WHERE table_name = @tableName", c.checkpointTable)
 	err := c.dbConn.QueryRow(query, sql.Named("tableName", c.tableName)).Scan(&lastLSN)
+
+	// Return err if any
 	if err == sql.ErrNoRows {
 		startLSNBytes, _ := hex.DecodeString(defaultStartLSN)
 		log.Printf("No previous LSN for %s. Initializing with default start LSN.", c.tableName)
@@ -66,12 +71,16 @@ func (c *CheckpointManager) LoadLastLSN(defaultStartLSN string) ([]byte, error) 
 	} else if err != nil {
 		return nil, fmt.Errorf("failed to load LSN for %s: %w", c.tableName, err)
 	}
+
+	// Log LSN and return to caller
 	log.Printf("Resuming %s from last LSN: %s", c.tableName, hex.EncodeToString(lastLSN))
 	return lastLSN, nil
 }
 
 // SaveLastLSN updates the last known LSN for the specified table
 func (c *CheckpointManager) SaveLastLSN(newLSN []byte) error {
+
+	// setup query
 	upsertQuery := fmt.Sprintf(`
     MERGE INTO %s AS target
     USING (VALUES (@tableName, @lastLSN, GETDATE())) AS source (table_name, last_lsn, updated_at)
@@ -82,11 +91,35 @@ func (c *CheckpointManager) SaveLastLSN(newLSN []byte) error {
         INSERT (table_name, last_lsn, updated_at) 
         VALUES (source.table_name, source.last_lsn, source.updated_at);`, c.checkpointTable)
 
+	// Save LSN to checkpoint table
 	_, err := c.dbConn.Exec(upsertQuery, sql.Named("tableName", c.tableName), sql.Named("lastLSN", newLSN))
 	if err != nil {
 		return fmt.Errorf("failed to save LSN for %s: %w", c.tableName, err)
 	}
 
+	// Log and return
 	log.Printf("Saved new LSN for %s: %s", c.tableName, hex.EncodeToString(newLSN))
 	return nil
+}
+
+// LoadLastLSNRequest defines the request payload for loading the last LSN.
+type LoadLastLSNRequest struct {
+	TableName string `json:"table_name"`
+}
+
+// LoadLastLSNResponse defines the response payload for loading the last LSN.
+type LoadLastLSNResponse struct {
+	LastLSN []byte `json:"last_lsn"`
+	Error   string `json:"error,omitempty"`
+}
+
+// SaveLastLSNRequest defines the request payload for saving the last LSN.
+type SaveLastLSNRequest struct {
+	TableName string `json:"table_name"`
+	LastLSN   []byte `json:"last_lsn"`
+}
+
+// SaveLastLSNResponse defines the response payload for saving the last LSN.
+type SaveLastLSNResponse struct {
+	Error string `json:"error,omitempty"`
 }

@@ -7,6 +7,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/katasec/dstream/topics"
 	"github.com/nats-io/nats.go"
 )
 
@@ -25,26 +26,24 @@ func NewCheckpointWorker(dbConn *sql.DB, nc *nats.Conn) *CheckpointWorker {
 
 func (cw *CheckpointWorker) Start() {
 	go func() {
-		// Listener for LoadLastLSN requests
-		subject := "checkpoint.load"
-		_, err := cw.nc.Subscribe(subject, cw.handleLoadLastLSN)
-		if err != nil {
-			log.Fatalf("Failed to subscribe to checkpoint.load: %v", err)
-		} else {
-			log.Printf("[CheckpointWorker] subscribed to %s\n", subject)
-		}
-
-		// Listener for SaveLastLSN requests
-		_, err = cw.nc.Subscribe("checkpoint.save", cw.handleSaveLastLSN)
-		if err != nil {
-			log.Fatalf("Failed to subscribe to checkpoint.save: %v", err)
-		}
+		// Subscribe to topics
+		cw.subscribe(topics.Checkpoints.Load, cw.handleLoadLastLSN)
+		cw.subscribe(topics.Checkpoints.Save, cw.handleSaveLastLSN)
 
 		log.Println("CheckpointWorker is now listening for requests...")
 		select {} // Keep the worker running
 	}()
 
 	time.Sleep(time.Second)
+}
+
+func (cw *CheckpointWorker) subscribe(subject string, handler nats.MsgHandler) {
+	_, err := cw.nc.Subscribe(subject, handler)
+	if err != nil {
+		log.Fatalf("Failed to subscribe to checkpoint.load: %v", err)
+	} else {
+		log.Printf("[CheckpointWorker] subscribed to %s\n", subject)
+	}
 }
 
 // handleLoadLastLSN processes a NATS message for loading the last LSN for a table.

@@ -28,5 +28,5 @@ func (w *PublisherWorker) Subscribe(topic string) {
 	if err != nil {
 		log.Fatalf("[%s] Error subscribing to topic '%s': %v", w.Name, topic, err)
 	}
-	log.Printf("[%s] Subscribed to topic '%s", w.Name, topic)
+	log.Printf("[%s] Subscribed to topic '%s'", w.Name, topic)
 }

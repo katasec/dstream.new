@@ -20,7 +20,6 @@ type Server struct {
 	config     *config.Config
 	dbConn     *sql.DB
 
-	sqlMonitor       SQLServerTableMonitor
 	checkpointWorker *CheckpointWorker
 	cdcFetcher       *ChangeDataFetcher
 	publisher        *PublisherWorker

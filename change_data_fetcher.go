@@ -19,11 +19,13 @@ type ChangeDataFetcher struct {
 
 // NewChangeDataFetcher creates a new worker that fetches CDC data
 func NewChangeDataFetcher(name string, conn *nats.Conn, db *sql.DB) *ChangeDataFetcher {
-	return &ChangeDataFetcher{
+	cdcFetcher := &ChangeDataFetcher{
 		name: name,
 		conn: conn,
 		db:   db,
 	}
+
+	return cdcFetcher
 }
 
 // FetchLastLSN fetches the last LSN for a given table from the checkpoint worker
@@ -53,9 +55,6 @@ func (w *ChangeDataFetcher) FetchLastLSN(tableName string) []byte {
 
 // ProcessCDCChanges processes CDC changes for a given table and publishes them
 func (w *ChangeDataFetcher) ProcessCDCChanges(tableName string, lastLSN []byte) {
-
-	// Fetch the last LSN
-	lastLSN = w.FetchLastLSN(tableName)
 
 	monitor := NewSQLServerTableMonitor2(w.db, tableName, w.conn, 5*time.Second, 30*time.Second)
 	err := monitor.StartMonitor(lastLSN)
