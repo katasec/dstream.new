@@ -24,11 +24,12 @@ func NewCheckpointWorker(dbConn *sql.DB, nc *nats.Conn) *CheckpointWorker {
 	}
 }
 
+// Start Statrs the CheckpointWorker servers that subscribe to events and registers handlers for its events
 func (cw *CheckpointWorker) Start() {
 	go func() {
 		// Subscribe to topics
-		cw.subscribe(topics.Checkpoints.Load, cw.handleLoadLastLSN)
-		cw.subscribe(topics.Checkpoints.Save, cw.handleSaveLastLSN)
+		cw.subscribe(topics.Checkpoints.Load, cw.loadLastLsnHandler)
+		cw.subscribe(topics.Checkpoints.Save, cw.saveLastLsnHandler)
 
 		log.Println("CheckpointWorker is now listening for requests...")
 		select {} // Keep the worker running
@@ -37,17 +38,8 @@ func (cw *CheckpointWorker) Start() {
 	time.Sleep(time.Second)
 }
 
-func (cw *CheckpointWorker) subscribe(subject string, handler nats.MsgHandler) {
-	_, err := cw.nc.Subscribe(subject, handler)
-	if err != nil {
-		log.Fatalf("Failed to subscribe to checkpoint.load: %v", err)
-	} else {
-		log.Printf("[CheckpointWorker] subscribed to %s\n", subject)
-	}
-}
-
-// handleLoadLastLSN processes a NATS message for loading the last LSN for a table.
-func (cw *CheckpointWorker) handleLoadLastLSN(msg *nats.Msg) {
+// loadLastLsnHandler A handler for topics.Checkpoints.Load event
+func (cw *CheckpointWorker) loadLastLsnHandler(msg *nats.Msg) {
 	log.Printf("[CheckpointWorker] Received LoadLastLSN request: %s", string(msg.Data))
 
 	var req LoadLastLSNRequest
@@ -68,6 +60,30 @@ func (cw *CheckpointWorker) handleLoadLastLSN(msg *nats.Msg) {
 
 	// Log the request and response
 	log.Printf("[CheckpointWorker] Processed LoadLastLSN request for table '%s'. Response: %s", req.TableName, string(respData))
+}
+
+// saveLastLsnHandler A handler for topics.Checkpoints.Save event
+func (cw *CheckpointWorker) saveLastLsnHandler(msg *nats.Msg) {
+	log.Printf("[CheckpointWorker] Received SaveLastLSN request: %s", string(msg.Data))
+
+	var req SaveLastLSNRequest
+	if err := json.Unmarshal(msg.Data, &req); err != nil {
+		log.Printf("[CheckpointWorker] Failed to parse SaveLastLSN request: %v", err)
+		return
+	}
+
+	// Process the save request
+	resp := cw.saveLastLSNToDb(req)
+	respData, _ := json.Marshal(resp)
+
+	// Respond back to the requester
+	if err := msg.Respond(respData); err != nil {
+		log.Printf("[CheckpointWorker] Failed to send SaveLastLSN response: %v", err)
+		return
+	}
+
+	// Log the request and response
+	log.Printf("[CheckpointWorker] Processed SaveLastLSN request for table '%s'. Response: %s", req.TableName, string(respData))
 }
 
 // getLastLSNFromDb retrieves the last LSN for a given table from the cdc_offsets table.
@@ -91,30 +107,6 @@ func (cw *CheckpointWorker) getLastLSNFromDb(req LoadLastLSNRequest) LoadLastLSN
 	}
 }
 
-// handleSaveLastLSN processes a NATS message for saving the last LSN for a table.
-func (cw *CheckpointWorker) handleSaveLastLSN(msg *nats.Msg) {
-	log.Printf("[CheckpointWorker] Received SaveLastLSN request: %s", string(msg.Data))
-
-	var req SaveLastLSNRequest
-	if err := json.Unmarshal(msg.Data, &req); err != nil {
-		log.Printf("[CheckpointWorker] Failed to parse SaveLastLSN request: %v", err)
-		return
-	}
-
-	// Process the save request
-	resp := cw.saveLastLSNToDb(req)
-	respData, _ := json.Marshal(resp)
-
-	// Respond back to the requester
-	if err := msg.Respond(respData); err != nil {
-		log.Printf("[CheckpointWorker] Failed to send SaveLastLSN response: %v", err)
-		return
-	}
-
-	// Log the request and response
-	log.Printf("[CheckpointWorker] Processed SaveLastLSN request for table '%s'. Response: %s", req.TableName, string(respData))
-}
-
 // saveLastLSNToDb updates the last LSN and timestamp for a given table in the cdc_offsets table.
 func (cw *CheckpointWorker) saveLastLSNToDb(req SaveLastLSNRequest) SaveLastLSNResponse {
 	query := `
@@ -134,4 +126,14 @@ func (cw *CheckpointWorker) saveLastLSNToDb(req SaveLastLSNRequest) SaveLastLSNR
 		}
 	}
 	return SaveLastLSNResponse{}
+}
+
+// subscribe is a convenience method for subscribing
+func (cw *CheckpointWorker) subscribe(subject string, handler nats.MsgHandler) {
+	_, err := cw.nc.Subscribe(subject, handler)
+	if err != nil {
+		log.Fatalf("Failed to subscribe to checkpoint.load: %v", err)
+	} else {
+		log.Printf("[CheckpointWorker] subscribed to %s\n", subject)
+	}
 }
