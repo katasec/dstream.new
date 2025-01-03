@@ -7,6 +7,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/katasec/dstream/natshelper"
 	"github.com/katasec/dstream/topics"
 	"github.com/nats-io/nats.go"
 )
@@ -28,8 +29,8 @@ func NewCheckpointWorker(dbConn *sql.DB, nc *nats.Conn) *CheckpointWorker {
 func (cw *CheckpointWorker) Start() {
 	go func() {
 		// Subscribe to topics
-		cw.subscribe(topics.Checkpoints.Load, cw.loadLastLsnHandler)
-		cw.subscribe(topics.Checkpoints.Save, cw.saveLastLsnHandler)
+		natshelper.Subscribe("CheckpointWorker", cw.nc, topics.Checkpoints.Load, cw.loadLastLsnHandler)
+		natshelper.Subscribe("CheckpointWorker", cw.nc, topics.Checkpoints.Save, cw.saveLastLsnHandler)
 
 		log.Println("CheckpointWorker is now listening for requests...")
 		select {} // Keep the worker running
@@ -126,14 +127,4 @@ func (cw *CheckpointWorker) saveLastLSNToDb(req SaveLastLSNRequest) SaveLastLSNR
 		}
 	}
 	return SaveLastLSNResponse{}
-}
-
-// subscribe is a convenience method for subscribing
-func (cw *CheckpointWorker) subscribe(subject string, handler nats.MsgHandler) {
-	_, err := cw.nc.Subscribe(subject, handler)
-	if err != nil {
-		log.Fatalf("Failed to subscribe to checkpoint.load: %v", err)
-	} else {
-		log.Printf("[CheckpointWorker] subscribed to %s\n", subject)
-	}
 }
