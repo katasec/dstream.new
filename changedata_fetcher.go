@@ -56,7 +56,7 @@ func (w *ChangeDataFetcher) FetchLastLSN(tableName string) []byte {
 // ProcessCDCChanges processes CDC changes for a given table and publishes them
 func (w *ChangeDataFetcher) ProcessCDCChanges(tableName string, lastLSN []byte) {
 
-	monitor := NewSQLServerTableMonitor2(w.db, tableName, w.conn, 5*time.Second, 30*time.Second)
+	monitor := NewSQLServerTableMonitor(w.db, tableName, w.conn, 5*time.Second, 30*time.Second)
 	err := monitor.StartMonitor(lastLSN)
 	if err != nil {
 		log.Fatalf("[%s] Error monitoring table '%s': %v", w.name, tableName, err)

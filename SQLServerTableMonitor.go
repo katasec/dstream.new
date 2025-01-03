@@ -25,8 +25,8 @@ type SQLServerTableMonitor struct {
 	columns         []string // Cached column names
 }
 
-// NewSQLServerTableMonitor2 creates a new SQLServerTableMonitor2
-func NewSQLServerTableMonitor2(dbConn *sql.DB, tableName string, natsConn *nats.Conn, pollInterval, maxPollInterval time.Duration) *SQLServerTableMonitor {
+// NewSQLServerTableMonitor creates a new SQLServerTableMonitor2
+func NewSQLServerTableMonitor(dbConn *sql.DB, tableName string, natsConn *nats.Conn, pollInterval, maxPollInterval time.Duration) *SQLServerTableMonitor {
 	// Fetch column names once and store them in the struct
 	columns, err := fetchColumnNames(dbConn, tableName)
 	if err != nil {

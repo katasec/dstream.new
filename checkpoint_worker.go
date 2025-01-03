@@ -46,12 +46,7 @@ func (cw *CheckpointWorker) loadLastLsnHandler(msg *nats.Msg) {
 	// Use UnmarshalJSON
 	req, err := utils.UnmarshalJSON[LoadLastLSNRequest](msg.Data)
 	if err != nil {
-		log.Fatalf("Failed to parse LoadLastLSN request: %v", err)
-	}
-
-	if err := json.Unmarshal(msg.Data, &req); err != nil {
-		log.Printf("[CheckpointWorker] Failed to parse LoadLastLSN request: %v", err)
-		return
+		log.Fatalf("[CheckpointWorker] Failed to parse LoadLastLSN request: %v", err)
 	}
 
 	// Process the load request
