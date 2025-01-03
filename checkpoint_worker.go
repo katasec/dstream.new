@@ -7,8 +7,8 @@ import (
 	"log"
 	"time"
 
-	"github.com/katasec/dstream/natshelper"
 	"github.com/katasec/dstream/topics"
+	"github.com/katasec/dstream/utils"
 	"github.com/nats-io/nats.go"
 )
 
@@ -29,8 +29,8 @@ func NewCheckpointWorker(dbConn *sql.DB, nc *nats.Conn) *CheckpointWorker {
 func (cw *CheckpointWorker) Start() {
 	go func() {
 		// Subscribe to topics
-		natshelper.Subscribe("CheckpointWorker", cw.nc, topics.Checkpoints.Load, cw.loadLastLsnHandler)
-		natshelper.Subscribe("CheckpointWorker", cw.nc, topics.Checkpoints.Save, cw.saveLastLsnHandler)
+		utils.Subscribe("CheckpointWorker", cw.nc, topics.Checkpoints.Load, cw.loadLastLsnHandler)
+		utils.Subscribe("CheckpointWorker", cw.nc, topics.Checkpoints.Save, cw.saveLastLsnHandler)
 
 		log.Println("CheckpointWorker is now listening for requests...")
 		select {} // Keep the worker running
@@ -43,7 +43,12 @@ func (cw *CheckpointWorker) Start() {
 func (cw *CheckpointWorker) loadLastLsnHandler(msg *nats.Msg) {
 	log.Printf("[CheckpointWorker] Received LoadLastLSN request: %s", string(msg.Data))
 
-	var req LoadLastLSNRequest
+	// Use UnmarshalJSON
+	req, err := utils.UnmarshalJSON[LoadLastLSNRequest](msg.Data)
+	if err != nil {
+		log.Fatalf("Failed to parse LoadLastLSN request: %v", err)
+	}
+
 	if err := json.Unmarshal(msg.Data, &req); err != nil {
 		log.Printf("[CheckpointWorker] Failed to parse LoadLastLSN request: %v", err)
 		return
